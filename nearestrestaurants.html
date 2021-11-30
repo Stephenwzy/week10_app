@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Demo: Analyze data with Turf.js and Mapbox GL JS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://api.tiles.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.js"></script>
+    <link href="https://api.tiles.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://api.mapbox.com/mapbox.js/plugins/turf/v3.0.11/turf.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <script>
+        mapboxgl.accessToken =
+            'pk.eyJ1IjoiamFrb2J6aGFvIiwiYSI6ImNpcms2YWsyMzAwMmtmbG5icTFxZ3ZkdncifQ.P9MBej1xacybKcDN_jehvw';
+        const map = new mapboxgl.Map({
+            container: 'map', // container id
+            style: 'mapbox://styles/mapbox/light-v10', // stylesheet location
+            center: [-122.304, 47.655], // starting position
+            zoom: 12 // starting zoom
+        });
+
+
+
+        map.loadImage(
+            'r.jpg',
+            (error, image) => {
+                if (error) throw error;
+                map.addImage('restaurant', image);
+            });
+
+            map.loadImage(
+            'l.jpg',
+            (error, image) => {
+                if (error) throw error;
+                map.addImage('academic', image);
+            });
+
+        async function geojsonFetch() {
+
+            let response, academics, restaurants;
+            response = await fetch('academic.geojson');
+            academics = await response.json();
+            response = await fetch('restaurants.geojson');
+            restaurants = await response.json()
+
+            map.on('load', () => {
+                map.addLayer({
+                    id: 'restaurants',
+                    type: 'symbol',
+                    source: {
+                        type: 'geojson',
+                        data: restaurants
+                    },
+                    layout: {
+                        'icon-image': 'restaurant',
+                        'icon-allow-overlap': true,
+                        'icon-size': 0.1
+                    },
+                    paint: {}
+                });
+
+                map.addLayer({
+                    id: 'academics',
+                    type: 'symbol',
+                    source: {
+                        type: 'geojson',
+                        data: libraries
+                    },
+                    layout: {
+                        'icon-image': 'academic',
+                        'icon-allow-overlap': true,
+                        'icon-size': 0.4
+                        },
+                    paint: {}
+                });
+
+                map.addSource('nearest-restaurant', {
+                    type: 'geojson',
+                    data: {
+                        'type': 'FeatureCollection',
+                        'features': []
+                    }
+                });
+
+
+                const popup = new mapboxgl.Popup();
+
+                map.on('mousemove', (event) => {
+                    const features = map.queryRenderedFeatures(event.point, {
+                        layers: ['restaurants', 'academics']
+                    });
+                    if (!features.length) {
+                        popup.remove();
+                        map.getCanvas().style.cursor = '';
+                        return;
+                    }
+
+                    const feature = features[0];
+
+                    popup
+                        .setLngLat(feature.geometry.coordinates)
+                        .setHTML(feature.properties.Name)
+                        .addTo(map);
+
+                    map.getCanvas().style.cursor = 'pointer';
+                });
+
+                map.on('click', (event) => {
+                    const academicFeatures = map.queryRenderedFeatures(event.point, {
+                        layers: ['academics']
+                    });
+                    if (!academicFeatures.length) {
+                        return;
+                    }
+
+                    const academicFeature = academicFeatures[0];
+
+                    const nearestRestaurant = turf.nearest(academicFeature, restaurants);
+
+                    if (nearestRestaurant === null) return;
+                    map.getSource('nearest-hospital').setData({
+                        'type': 'FeatureCollection',
+                        'features': [nearestRestaurant]
+                    });
+
+                    if (map.getLayer('nearest-restaurant')) {
+                        map.removeLayer('nearest-restaurant');
+                    }
+
+                    map.addLayer({
+                            id: 'nearest-restaurant',
+                            type: 'circle',
+                            source: 'nearest-restaurant',
+                            paint: {
+                                'circle-radius': 12,
+                                'circle-color': '#486DE0'
+                            }
+                        },
+                        'restaurants'
+                    );
+                });
+            });
+
+        };
+        geojsonFetch();
+    </script>
+</body>
+
+</html>
